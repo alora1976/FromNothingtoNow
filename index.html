@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>From Nothing to Now</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { width:100%; height:100%; background:#000008; overflow:hidden; font-family:Georgia,serif; user-select:none; }
+  canvas { position:fixed; top:0; left:0; width:100%; height:100%; }
+
+  /* Bottom label bar */
+  #ui { position:fixed; bottom:0; left:0; right:0; padding:1.4rem 2rem 2rem; background:linear-gradient(to top,rgba(0,0,8,.93) 55%,transparent); display:flex; flex-direction:column; align-items:center; gap:.3rem; pointer-events:none; transition:opacity 1.2s ease; }
+  #ctr { font-size:10px; letter-spacing:.2em; text-transform:uppercase; color:rgba(240,237,230,.32); }
+  #ttl { font-size:clamp(1rem,2.2vw,1.5rem); font-weight:normal; color:rgba(240,237,230,.9); letter-spacing:.05em; text-align:center; }
+  #sub { font-size:clamp(.7rem,1.3vw,.85rem); color:rgba(240,237,230,.38); font-style:italic; letter-spacing:.06em; text-align:center; }
+  #bar { position:fixed; bottom:0; left:0; height:2px; background:rgba(143,196,168,.55); transition:width .5s ease; pointer-events:none; }
+
+  /* Intro overlay */
+  #intro { position:fixed; inset:0; z-index:100; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1rem; background:#000008; transition:opacity 1.2s ease; }
+  #intro h1 { font-size:clamp(1.6rem,3.5vw,2.6rem); font-weight:normal; color:rgba(240,237,230,.92); letter-spacing:.06em; text-align:center; }
+  #intro p { font-size:clamp(.8rem,1.4vw,.95rem); color:rgba(240,237,230,.38); font-style:italic; letter-spacing:.07em; }
+  #intro .cta { margin-top:2rem; font-size:10px; letter-spacing:.2em; text-transform:uppercase; color:rgba(143,196,168,.65); animation:blink 2s ease-in-out infinite; }
+  @keyframes blink { 0%,100%{opacity:.4} 50%{opacity:1} }
+
+  /* End overlay */
+  #end { position:fixed; inset:0; z-index:90; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(0,0,8,.28); opacity:0; pointer-events:none; transition:opacity 1.5s ease; }
+  #end.show { opacity:1; pointer-events:all; }
+  #rst { background:rgba(0,0,10,.35); border:1px solid rgba(200,160,255,.55); color:rgba(235,220,255,.9); font-family:Georgia,serif; font-size:10px; letter-spacing:.18em; text-transform:uppercase; padding:.6rem 1.5rem; cursor:pointer; transition:all .3s; backdrop-filter:blur(2px); }
+  #rst:hover { background:rgba(200,160,255,.18); border-color:rgba(200,160,255,.9); color:#fff; }
+
+  @keyframes fadeIn { from{opacity:0;transform:translateY(3px)} to{opacity:1;transform:translateY(0)} }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="ui">
+  <div id="ctr">Scene 1 of 15</div>
+  <div id="ttl">Symmetry Breaking</div>
+  <div id="sub">13.8 billion years ago, the first difference</div>
+</div>
+<div id="bar" style="width:0%"></div>
+
+<div id="intro">
+  <h1>From Nothing to Now</h1>
+  <p>13.8 billion years of self-organization</p>
+  <div class="cta">click anywhere to begin</div>
+</div>
+
+<div id="end">
+  <button id="rst">begin again</button>
+</div>
+
+<script>
+// =============================================================================
+// FROM NOTHING TO NOW
+// Interactive web experience: 15 scenes, click to advance
+// Canvas handles all animation. Commentary lives in the speaker-notes document.
+// =============================================================================
+
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+let W, H, cx, cy;
+function resize(){ W=cv.width=innerWidth; H=cv.height=innerHeight; cx=W/2; cy=H/2; }
+resize(); addEventListener('resize', resize);
+
+const TAU = Math.PI*2;
+const clamp = (a,b,v) => Math.max(a,Math.min(b,v));
+const lerp  = (a,b,t) => a+(b-a)*t;
+const ease  = t => t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+const fi    = (t,d,u) => clamp(0,1,(t-d)/u);
+
+// Deeper, saturated jewel-tone backgrounds so bright spectrum linework pops
+const bgs = ['18,2,42','26,2,52','10,4,54','48,6,40','30,6,58','8,10,60','6,20,64','10,8,66','40,6,66','54,14,30','58,20,10','48,10,44','8,30,66','10,40,70','30,10,72'];
+function bg(i){
+  ctx.fillStyle='rgb('+bgs[i]+')'; ctx.fillRect(0,0,W,H);
+  // slow-drifting radial aurora wash for psychedelic depth
+  const hb=(gT*8 + i*40)%360;
+  const g=ctx.createRadialGradient(cx,cy,0,cx,cy,Math.max(W,H)*.75);
+  g.addColorStop(0,`hsla(${hb},85%,55%,0.16)`);
+  g.addColorStop(0.5,`hsla(${(hb+80)%360},80%,50%,0.07)`);
+  g.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+}
+
+// ===== RAINBOW ENGINE =======================================================
+let gT = 0; // global rainbow clock (seconds), always advancing
+function spectrum(offset, a, light){
+  const h=(gT*45 + (offset||0))%360;
+  return `hsla(${h},95%,${light==null?65:light}%,${a==null?1:a})`;
+}
+function spectrumAt(idx, count, a, light){
+  const h=(gT*35 + (idx/count)*360)%360;
+  return `hsla(${h},95%,${light==null?65:light}%,${a==null?1:a})`;
+}
+
+function circ(x,y,r,s,f,lw){ if(r<=0)return; ctx.beginPath(); ctx.arc(x,y,r,0,TAU); if(f){ctx.fillStyle=f;ctx.fill();} if(s){ctx.strokeStyle=s;ctx.lineWidth=lw||1;ctx.stroke();} }
+function ln(x1,y1,x2,y2,c,lw){ ctx.strokeStyle=c;ctx.lineWidth=lw||1;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke(); }
+function poly(px,py,r,n,rot,c,lw){ if(r<=0)return; ctx.strokeStyle=c;ctx.lineWidth=lw||1;ctx.beginPath(); for(let i=0;i<=n;i++){const a=rot+(i/n)*TAU;i?ctx.lineTo(px+Math.cos(a)*r,py+Math.sin(a)*r):ctx.moveTo(px+Math.cos(a)*r,py+Math.sin(a)*r);} ctx.stroke(); }
+function glow(x,y,r,c){ if(r<=0)return; const g=ctx.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,c);g.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,r,0,TAU);ctx.fill(); }
+function flowerCenters(px,py,r){ const c=[{x:px,y:py}]; for(let i=0;i<6;i++){const a=(i/6)*TAU;c.push({x:px+Math.cos(a)*r,y:py+Math.sin(a)*r});} return c; }
+
+// stub -- annotation is now HTML, not canvas
+function drawAnnotation(){ }
+
+// Annotation data for each scene
+// Annotation content now lives in the companion speaker-notes document.
+
+
+// Build and show the HTML annotation panel for scene i
+const scenes=[
+
+{title:'Symmetry Breaking',sub:'13.8 billion years ago · the first difference',
+draw(t){
+  bg(0);
+  if(t<1){ const a=clamp(0,1,t*2); glow(cx,cy,a*80,`hsla(${(gT*40+200)%360},92%,66%,${a*.9})`); return; }
+  const boom=ease(clamp(0,1,(t-1)/3));
+  const R=Math.min(W,H);
+  // Nested triangles , Sri Yantra expansion
+  for(let i=0;i<10;i++){
+    const r=boom*R*(.03+i*.04);
+    const alpha=(1-i/12)*boom*.5;
+    poly(cx,cy,r,3,-Math.PI/2+t*.015,spectrumAt(i,10,alpha*1.6,68),1.6);
+    poly(cx,cy,r,3,Math.PI/6+t*.015,spectrumAt(i+5,10,alpha*1.3,72),1);
+  }
+  // Expanding rings
+  for(let i=1;i<=7;i++){
+    const r=boom*R*.055*i;
+    circ(cx,cy,r,`hsla(${(gT*40+200)%360},92%,66%,${(1-i/9)*boom*.28})`,'',0.5);
+  }
+  glow(cx,cy,60+boom*30,`hsla(${(gT*40+200)%360},92%,66%,${(1-boom*.65)*.85})`);
+}},
+
+{title:'The First Particles',sub:'matter condenses from energy · the first constraints appear',
+draw(t){
+  bg(1);
+  const R=Math.min(W,H);
+  const a=clamp(0,1,t/3);
+  const r=R*.33*.38;
+  // Flower of Life , sacred geometry of matter
+  const fc=flowerCenters(cx,cy,r*2);
+  circ(cx,cy,r*4,`hsla(${(gT*40+140)%360},92%,66%,${a*.2})`,'',0.5);
+  circ(cx,cy,r*2,`hsla(${(gT*40+200)%360},92%,66%,${a*.3})`,'',0.5);
+  fc.forEach((c,i)=>{
+    const ia=clamp(0,1,(t-i*.12)/2);
+    circ(c.x,c.y,r*2,`hsla(${(gT*40+140)%360},92%,66%,${ia*.28})`,'',0.7);
+    circ(c.x,c.y,4+2*Math.sin(t*1.5+i),'',`hsla(${(gT*40+200)%360},92%,66%,${ia*.85})`);
+  });
+  // Metatron connecting lines
+  for(let i=1;i<fc.length;i++)for(let j=i+1;j<fc.length;j++){
+    const la=clamp(0,1,(t-1.5)/2)*.12;
+    ln(fc[i].x,fc[i].y,fc[j].x,fc[j].y,`hsla(${(gT*40+140)%360},92%,66%,${la})`);
+  }
+  const p=.7+.3*Math.sin(t*2);
+  glow(cx,cy,28*p,`hsla(${(gT*40+200)%360},92%,66%,${a*.5})`);
+}},
+
+{title:'The First Stars',sub:'hydrogen ignites · the first dissipative structures burn',
+draw(t){
+  bg(2);
+  const R=Math.min(W,H);
+  // Star field
+  for(let i=0;i<160;i++){
+    circ(((i*137.5)%1)*W,((i*97.3)%1)*H,.3+((i*3.7)%1)*.7,'',`hsla(${(gT*40+200)%360},92%,66%,${.15+((i*7.1)%1)*.3})`);
+  }
+  const ig=clamp(0,1,t/2.5);
+  // 12-pointed star geometry
+  for(let i=0;i<12;i++){
+    const angle=(i/12)*TAU+t*.04;
+    const len=ig*R*.32*(0.4+.6*Math.abs(Math.sin(i*1.7)));
+    ln(cx,cy,cx+Math.cos(angle)*len,cy+Math.sin(angle)*len,`hsla(${(gT*40+200)%360},92%,66%,${ig*.38*(0.5+.5*Math.sin(i*1.3+t))})`,1);
+  }
+  // Energy shells
+  for(let i=1;i<=5;i++){
+    circ(cx,cy,ig*i*R*.065,`hsla(${(gT*40+200)%360},92%,66%,${180+i*12},${60+i*10},${ig*(1-i/6)*.42})`,'',1);
+  }
+  glow(cx,cy,18+ig*48,`hsla(${(gT*40+200)%360},92%,66%,${ig*.85})`);
+  glow(cx,cy,55+ig*75,`hsla(${(gT*40+200)%360},92%,66%,${ig*.32})`);
+  // Entropy export
+  if(t>3){ const ea=fi(t,3,1.5);
+    for(let i=0;i<8;i++){const a=(i/8)*TAU;ln(cx+Math.cos(a)*R*.14,cy+Math.sin(a)*R*.14,cx+Math.cos(a)*R*.29,cy+Math.sin(a)*R*.29,`hsla(${(gT*40+200)%360},92%,66%,${ea*.22})`,0.7);}
+  }
+}},
+
+{title:'Supernovae',sub:'death as the condition for greater complexity · elements scatter',
+draw(t){
+  bg(3);
+  const R=Math.min(W,H);
+
+  // Seed the sparkle field once using stable pseudo-random values
+  const NUM_SPARKS=320;
+  const sparks=[];
+  for(let i=0;i<NUM_SPARKS;i++){
+    const seed=i*137.508; // golden angle seed , stable
+    const angle=seed;
+    const speed=0.06+((i*7.3)%1)*0.22;
+    const dist=speed*(R*.52);
+    const size=0.8+((i*3.1)%1)*3.2;
+    const hue=((i*11.7)%1)*360; // full rainbow scatter
+    const brightness=60+((i*5.3)%1)*40;
+    const twinklePhase=((i*9.1)%1)*TAU;
+    sparks.push({angle,speed,dist,size,hue,brightness,twinklePhase});
+  }
+
+  // Phase 1: pre-explosion glow (t < 0.8)
+  if(t<0.8){
+    const preGlow=clamp(0,1,t/0.8);
+    glow(cx,cy,12+preGlow*35,`hsla(${(gT*40+200)%360},92%,66%,${preGlow*0.9})`);
+    glow(cx,cy,30+preGlow*60,`hsla(${(gT*40+200)%360},92%,66%,${preGlow*0.5})`);
+    return;
+  }
+
+  const ex=clamp(0,1,(t-0.8)/2.2); // explosion progress 0-1
+  const exE=ease(ex);
+
+  // Shockwave rings , expanding outward fast then fading
+  for(let ring=0;ring<4;ring++){
+    const ringDelay=ring*0.18;
+    const rp=clamp(0,1,(ex-ringDelay)/(1-ringDelay));
+    const rr=rp*R*(0.12+ring*0.1);
+    const alpha=(1-rp)*(0.7-ring*0.12);
+    if(alpha>0){
+      ctx.strokeStyle=`hsla(${(gT*40+200)%360},92%,66%,${140+ring*22},${40+ring*15},${alpha})`;
+      ctx.lineWidth=3-ring*0.5;
+      ctx.beginPath(); ctx.arc(cx,cy,rr,0,TAU); ctx.stroke();
+    }
+  }
+
+  // Central flash , bright then fading
+  const flashA=Math.max(0,0.9-ex*1.1);
+  if(flashA>0){
+    glow(cx,cy,15+exE*45,`hsla(${(gT*40+200)%360},92%,66%,${flashA})`);
+    glow(cx,cy,40+exE*80,`hsla(${(gT*40+200)%360},92%,66%,${flashA*0.5})`);
+  }
+
+  // Scattered sparkles flying outward
+  sparks.forEach((sp,i)=>{
+    const travelProgress=clamp(0,1,(ex-i/NUM_SPARKS*0.4)/0.8);
+    if(travelProgress<=0) return;
+
+    const currentDist=travelProgress*sp.dist;
+    const x=cx+Math.cos(sp.angle)*currentDist;
+    const y=cy+Math.sin(sp.angle)*currentDist;
+
+    // Twinkle , sparkles shimmer as they travel
+    const twinkle=0.5+0.5*Math.sin(t*4+sp.twinklePhase);
+    const alpha=twinkle*(1-travelProgress*0.4)*0.85;
+    const r=sp.size*(0.6+twinkle*0.4);
+
+    // Core sparkle , clamp radius to prevent negative value errors
+    const safeR=Math.max(0.01,r);
+    circ(x,y,safeR,'',`hsla(${sp.hue},90%,${sp.brightness}%,${alpha})`);
+
+    // Cross-shaped sparkle glint for the brightest ones
+    if(sp.size>2.5 && twinkle>0.7){
+      const glintLen=safeR*3;
+      const ga=alpha*0.5;
+      ln(x-glintLen,y,x+glintLen,y,`hsla(${sp.hue},80%,95%,${ga})`,0.6);
+      ln(x,y-glintLen,x,y+glintLen,`hsla(${sp.hue},80%,95%,${ga})`,0.6);
+    }
+  });
+
+  // Remnant sparkle cloud , lingering glow at center
+  if(ex>0.5){
+    const remnantA=clamp(0,0.4,(ex-0.5)*0.8);
+    glow(cx,cy,18+ex*12,`hsla(${(gT*40+200)%360},92%,66%,${remnantA})`);
+  }
+
+  // Some sparkles stop and become permanent distant stars
+  if(ex>0.7){
+    const starA=clamp(0,1,(ex-0.7)/0.5);
+    for(let i=0;i<60;i++){
+      const sp=sparks[i*5%NUM_SPARKS];
+      const x=cx+Math.cos(sp.angle)*sp.dist*0.95;
+      const y=cy+Math.sin(sp.angle)*sp.dist*0.95;
+      const twinkle=0.4+0.6*Math.sin(t*2.5+sp.twinklePhase);
+      circ(x,y,Math.max(0.01,sp.size*0.4*twinkle),'',`hsla(${sp.hue},70%,85%,${starA*twinkle*0.7})`);
+    }
+  }
+}},
+
+{title:'Planetary Chemistry',sub:'constraints tighten · molecular complexity emerges',
+draw(t){
+  bg(4);
+  const R=Math.min(W,H);
+  const a=clamp(0,1,t/2);
+  const pR=R*.18;
+  glow(cx,cy,pR*1.3,`hsla(${(gT*40+200)%360},92%,66%,${a*.68})`);
+  circ(cx,cy,pR,`hsla(${(gT*40+200)%360},92%,66%,${a*.55})`,'',2);
+  // Orbital rings
+  for(let i=1;i<=3;i++) circ(cx,cy,pR*(1.4+i*.32),`hsla(${(gT*40+200)%360},92%,66%,${a*.13*(1-i/4)})`,'',0.5);
+  // Vesica Piscis molecules orbiting
+  if(a>.25){ const va=fi(t,1,2);
+    const vR=R*.07, vO=vR*.82;
+    for(let i=0;i<6;i++){
+      const ang=(i/6)*TAU+t*.24;
+      const oR=pR*(1.62+i*.18);
+      const ox=cx+Math.cos(ang)*oR, oy=cy+Math.sin(ang)*oR;
+      circ(ox-vO*.5,oy,vR,`hsla(${(gT*40+140)%360},92%,66%,${va*.45})`,'',0.8);
+      circ(ox+vO*.5,oy,vR,`hsla(${(gT*40+140)%360},92%,66%,${va*.45})`,'',0.8);
+      circ(ox,oy,2.5,'',`hsla(${(gT*40+90)%360},92%,66%,${va*.9})`);
+    }
+  }
+}},
+
+{title:'Self-Replicating Molecules',sub:'information enters the universe · the prior is born',
+draw(t){
+  bg(5);
+  const R=Math.min(W,H);
+  const hH=H*.68, hY=cy-hH/2, turns=4, amp=R*.086, steps=200;
+  // Rungs
+  for(let i=0;i<=steps;i+=8){
+    const frac=i/steps, y=hY+frac*hH, a=frac*turns*TAU+t*.4;
+    ln(cx+Math.cos(a)*amp,y,cx+Math.cos(a+Math.PI)*amp,y,`hsla(${(gT*40+140)%360},92%,66%,${.18+.08*Math.sin(a)})`,0.8);
+  }
+  // Strand 1
+  ctx.strokeStyle=`hsla(${(gT*40+140)%360},92%,66%,.75)`; ctx.lineWidth=2; ctx.beginPath();
+  for(let i=0;i<=steps;i++){const frac=i/steps,y=hY+frac*hH,a=frac*turns*TAU+t*.4,x=cx+Math.cos(a)*amp;i?ctx.lineTo(x,y):ctx.moveTo(x,y);} ctx.stroke();
+  // Strand 2
+  ctx.strokeStyle=`hsla(${(gT*40+30)%360},92%,66%,.75)`; ctx.lineWidth=2; ctx.beginPath();
+  for(let i=0;i<=steps;i++){const frac=i/steps,y=hY+frac*hH,a=frac*turns*TAU+t*.4+Math.PI,x=cx+Math.cos(a)*amp;i?ctx.lineTo(x,y):ctx.moveTo(x,y);} ctx.stroke();
+  // Replication fork
+  if(t>2.5){ const ff=clamp(0,1,(t-2.5)/2);
+    const fy=hY+ff*hH*.55;
+    ln(cx-amp*2.2,fy,cx-amp*.5,fy+H*.06,`hsla(${(gT*40+200)%360},92%,66%,${ff*.45})`,0.8);
+    ln(cx+amp*2.2,fy,cx+amp*.5,fy+H*.06,`hsla(${(gT*40+200)%360},92%,66%,${ff*.45})`,0.8);
+    ln(cx-amp*2.2,fy,cx+amp*2.2,fy,`hsla(${(gT*40+200)%360},92%,66%,${ff*.28})`,0.5);
+  }
+}},
+
+{title:'The First Cells',sub:'a boundary forms · interior and exterior · the first self',
+draw(t){
+  bg(6);
+  const R=Math.min(W,H);
+  const cR=R*.112;
+  const hexPos=[
+    {x:cx,y:cy},{x:cx+cR*1.73,y:cy-cR},{x:cx+cR*1.73,y:cy+cR},
+    {x:cx,y:cy+cR*2},{x:cx-cR*1.73,y:cy+cR},{x:cx-cR*1.73,y:cy-cR},{x:cx,y:cy-cR*2}
+  ];
+  hexPos.forEach((p,i)=>{
+    const a=clamp(0,1,(t-i*.28)/1.5); if(a<=0) return;
+    const pulse=.93+.07*Math.sin(t*1.2+i);
+    // Hexagonal membrane
+    poly(p.x,p.y,cR*.94,6,Math.PI/6,`hsla(${(gT*40+140)%360},92%,66%,${a*.52})`,1.2);
+    // Cytoplasm glow
+    glow(p.x,p.y,cR*.75,`hsla(${(gT*40+140)%360},92%,66%,${a*.38})`);
+    // Nucleus
+    const nR=cR*.2;
+    glow(p.x,p.y,nR*pulse*3,`hsla(${(gT*40+120)%360},92%,66%,${a*.28})`);
+    circ(p.x,p.y,nR*pulse,`hsla(${(gT*40+120)%360},92%,66%,${a*.58})`,'',0.8);
+    // Pulse ring
+    circ(p.x,p.y,cR*(.96+.04*Math.sin(t+i)),`hsla(${(gT*40+140)%360},92%,66%,${a*.14})`,'',4);
+  });
+}},
+
+{title:'Nervous Systems',sub:'the world models itself · the first prediction',
+draw(t){
+  bg(7);
+  const R=Math.min(W,H);
+  const a=clamp(0,1,t/2);
+  const sR=R*.038;
+  glow(cx,cy,sR*3,`hsla(${(gT*40+225)%360},92%,66%,${a*.48})`);
+  circ(cx,cy,sR,`hsla(${(gT*40+220)%360},92%,66%,${a*.8})`,'',1.5);
+
+  // Axon , right
+  if(a>.08){
+    const aLen=R*.42;
+    ctx.strokeStyle=`hsla(${(gT*40+220)%360},92%,66%,${a*.68})`; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(cx+sR,cy);
+    ctx.bezierCurveTo(cx+aLen*.3,cy+R*.055,cx+aLen*.62,cy-R*.04,cx+aLen,cy); ctx.stroke();
+    // Terminals
+    for(let i=0;i<5;i++){
+      const ex=cx+aLen+Math.cos((i/4)*Math.PI*.8-Math.PI*.4)*R*.07;
+      const ey=cy+Math.sin((i/4)*Math.PI*.8-Math.PI*.4)*R*.07;
+      const ba=fi(t,1+i*.18,.8);
+      circ(ex,ey,2.5+2*Math.sin(t*2+i),'',`hsla(${(gT*40+140)%360},92%,66%,${ba*.8})`);
+      ln(cx+aLen,cy,ex,ey,`hsla(${(gT*40+140)%360},92%,66%,${ba*.35})`,.8);
+    }
+  }
+
+  // Dendritic tree , fractal branching left
+  if(a>.18){
+    function branch(x,y,ang,len,depth,alpha){
+      if(depth<0||len<4) return;
+      const ba=fi(t,.4+(4-depth)*.32,.75);
+      const ex=x+Math.cos(ang)*len, ey=y+Math.sin(ang)*len;
+      ln(x,y,ex,ey,`hsla(${(gT*40+220)%360},92%,66%,${ba*alpha*.68})`, .4+depth*.28);
+      // Spines
+      if(depth<=2)for(let s=0;s<3;s++){
+        const sa=ang+(s-1)*.38, sl=len*.14;
+        const sx=lerp(x,ex,(s+1)/5), sy=lerp(y,ey,(s+1)/5);
+        ln(sx,sy,sx+Math.cos(sa+Math.PI/2)*sl,sy+Math.sin(sa+Math.PI/2)*sl,`hsla(${(gT*40+140)%360},92%,66%,${ba*alpha*.45})`,.35);
+      }
+      branch(ex,ey,ang-.48,len*.67,depth-1,alpha*.85);
+      branch(ex,ey,ang+.44,len*.63,depth-1,alpha*.85);
+      if(depth>3) branch(ex,ey,ang-.08,len*.54,depth-2,alpha*.7);
+    }
+    branch(cx-sR,cy,Math.PI+.14,R*.1,5,1);
+    branch(cx-sR*.7,cy-sR*.7,Math.PI*1.24,R*.085,4,.75);
+    branch(cx-sR*.7,cy+sR*.7,Math.PI*.76,R*.085,4,.75);
+    // Basal dendrites
+    branch(cx-sR*.4,cy+sR,Math.PI*.6,R*.075,3,.6);
+    branch(cx-sR*.4,cy-sR,Math.PI*1.4,R*.075,3,.6);
+  }
+
+  // Action potential
+  if(t>1.5){
+    const sp=((t-1.5)*.28)%1;
+    glow(cx+sR+sp*R*.42,cy,11,`hsla(${(gT*40+140)%360},92%,66%,${.8*(1-sp*.5)})`);
+  }
+
+  // Background network
+  if(t>3){ const na=fi(t,3,2);
+    const neurons=[{x:cx-R*.3,y:cy-R*.24},{x:cx+R*.12,y:cy-R*.27},{x:cx-R*.27,y:cy+R*.22},{x:cx+R*.27,y:cy+R*.18}];
+    neurons.forEach(n=>{ circ(n.x,n.y,R*.017,`hsla(${(gT*40+225)%360},92%,66%,${na*.28})`,'',.7); ln(n.x,n.y,cx,cy,`hsla(${(gT*40+225)%360},92%,66%,${na*.09})`,.4); });
+  }
+}},
+
+{title:'The Predictive Brain',sub:'the default mode network · the self-model · the prior enforcer',
+draw(t){
+  bg(8);
+  const R=Math.min(W,H);
+  const a=clamp(0,1,t/2.5);
+  const bW=R*.4, bH=R*.31;
+
+  // Brain outline with cortical folds
+  ctx.strokeStyle=`hsla(${(gT*40+270)%360},92%,66%,${a*.32})`; ctx.lineWidth=1.5;
+  ctx.beginPath();
+  for(let i=0;i<=360;i++){
+    const ang=(i/360)*TAU;
+    const fold=1+.042*Math.sin(ang*8)+.02*Math.cos(ang*13);
+    const x=cx+Math.cos(ang)*bW*fold, y=cy+Math.sin(ang)*bH*fold*(ang<Math.PI?1:.86);
+    i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+  }
+  ctx.closePath();
+  ctx.fillStyle=`rgba(18,14,28,${a*.38})`; ctx.fill(); ctx.stroke();
+
+  // DMN nodes , anatomically distributed, not symmetric
+  // mPFC: front top-center, PCC: back center, TPJ: right side,
+  // HPC: left inner, MTL: right inner-low
+  const nodes=[
+    {x:cx+bW*.04,  y:cy-bH*.52, lbl:'mPFC', r:R*.026, desc:'self-referential thought'},
+    {x:cx-bW*.28,  y:cy+bH*.12, lbl:'PCC',  r:R*.024, desc:'DMN hub · memory integration'},
+    {x:cx+bW*.44,  y:cy-bH*.05, lbl:'TPJ',  r:R*.02,  desc:'self-other boundary'},
+    {x:cx-bW*.14,  y:cy+bH*.44, lbl:'HPC',  r:R*.019, desc:'memory consolidation'},
+    {x:cx+bW*.22,  y:cy+bH*.38, lbl:'MTL',  r:R*.018, desc:'personal continuity'},
+  ];
+
+  // Weighted connections , based on actual DMN connectivity strength
+  // mPFC-PCC is the strongest connection in the DMN
+  const connections=[
+    {a:0,b:1,w:1.0},   // mPFC-PCC: primary DMN axis, strongest
+    {a:0,b:2,w:0.55},  // mPFC-TPJ: moderate
+    {a:1,b:2,w:0.62},  // PCC-TPJ: moderate-strong
+    {a:1,b:3,w:0.58},  // PCC-HPC: memory-hub link
+    {a:1,b:4,w:0.52},  // PCC-MTL: hub-temporal
+    {a:3,b:4,w:0.7},   // HPC-MTL: strong anatomical neighbors
+    {a:0,b:3,w:0.32},  // mPFC-HPC: weaker
+    {a:2,b:4,w:0.28},  // TPJ-MTL: weaker
+  ];
+
+  const pulse=.5+.5*Math.sin(t*1.4);
+
+  // Draw connections first , varying weight and opacity
+  connections.forEach(conn=>{
+    const na=nodes[conn.a], nb=nodes[conn.b];
+    const lineW=conn.w*2.5;
+    const alpha=a*conn.w*.45*pulse;
+    // Slight curve on each connection to avoid straight-line pentagram look
+    const midX=(na.x+nb.x)/2 + (Math.random()*0-0); // kept straight but weighted
+    ctx.strokeStyle=`hsla(${(gT*40+270)%360},92%,66%,${alpha})`;
+    ctx.lineWidth=lineW;
+    ctx.beginPath();
+    ctx.moveTo(na.x,na.y);
+    // Gentle bezier curve , control point offset perpendicular to line
+    const dx=nb.x-na.x, dy=nb.y-na.y;
+    const len=Math.hypot(dx,dy);
+    const perp={x:-dy/len*len*.12, y:dx/len*len*.12};
+    const ctrl={x:(na.x+nb.x)/2+perp.x*(conn.a+conn.b)%3*.4,
+                y:(na.y+nb.y)/2+perp.y*(conn.a+conn.b)%3*.4};
+    ctx.quadraticCurveTo(ctrl.x,ctrl.y,nb.x,nb.y);
+    ctx.stroke();
+
+    // Signal pulses traveling along connections
+    if(t>1.5){
+      const sp=((t*0.4+conn.a*.3+conn.b*.17))%1;
+      const px=na.x+(nb.x-na.x)*sp;
+      const py=na.y+(nb.y-na.y)*sp;
+      glow(px,py,5+conn.w*4,`hsla(${(gT*40+275)%360},92%,66%,${a*conn.w*.6})`);
+    }
+  });
+
+  // Draw nodes on top of connections
+  nodes.forEach((n,i)=>{
+    const na=fi(t,i*.22,1.2);
+    const np=.82+.18*Math.sin(t*1.4+i*1.2);
+    // Outer glow , size reflects connectivity (PCC biggest, MTL smallest)
+    glow(n.x,n.y,n.r*np*4,`hsla(${(gT*40+265)%360},92%,66%,${na*a*.35})`);
+    // Node circle
+    circ(n.x,n.y,n.r*np,`hsla(${(gT*40+280)%360},92%,66%,${na*.82})`,'',1.5);
+    // Inner bright core
+    circ(n.x,n.y,n.r*np*.45,'',`hsla(${(gT*40+285)%360},92%,66%,${na*.6})`);
+    // Label above node
+    ctx.fillStyle=`hsla(${(gT*40+285)%360},92%,66%,${na*.62})`;
+    ctx.font=`${clamp(8,11,R/65)}px Georgia`;
+    ctx.textAlign='center';
+    ctx.fillText(n.lbl,n.x,n.y-n.r*np-6);
+  });
+
+  // Corpus callosum , midline structure
+  ctx.strokeStyle=`hsla(${(gT*40+270)%360},92%,66%,${a*.17})`; ctx.lineWidth=3; ctx.beginPath();
+  ctx.moveTo(cx-bW*.18,cy-bH*.05);
+  ctx.bezierCurveTo(cx-bW*.1,cy-bH*.24,cx+bW*.1,cy-bH*.24,cx+bW*.18,cy-bH*.05);
+  ctx.stroke();
+
+  // Filter boundary , dashed ellipse showing prior enforcement zone
+  if(t>2.8){ const fa=fi(t,2.8,1.5);
+    ctx.strokeStyle=`hsla(${(gT*40+200)%360},92%,66%,${fa*.35})`; ctx.lineWidth=1.2; ctx.setLineDash([4,6]);
+    ctx.beginPath(); ctx.ellipse(cx,cy+bH*.1,bW*.58,bH*.48,0,0,TAU); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}},
+
+{title:'Language and Story',sub:'experience compressed into symbol · transmitted across time',
+draw(t){
+  bg(9);
+  const R=Math.min(W,H);
+  const a=clamp(0,1,t/2);
+  // Nested yantra triangles , compression geometry
+  for(let i=0;i<8;i++){
+    const r=R*(.038+i*.048);
+    const la=a*clamp(0,1,(t-i*.18)/2);
+    poly(cx,cy,r,3,-Math.PI/2,`hsla(${(gT*40+45)%360},92%,66%,${la*.38})`,.8);
+    poly(cx,cy,r,3,Math.PI/6,`hsla(${(gT*40+140)%360},92%,66%,${la*.28})`,.7);
+  }
+  // Orbiting concept nodes
+  const words=['story','myth','symbol','ritual','ancestor','river','fire','sky','kin','sacred'];
+  words.forEach((w,i)=>{
+    const ang=(i/words.length)*TAU+t*.055;
+    const oR=R*(.2+((i*7.3)%1)*.13);
+    const wx=cx+Math.cos(ang)*oR, wy=cy+Math.sin(ang)*oR;
+    const wa=fi(t,i*.13,1.4);
+    circ(wx,wy,4,'',`hsla(${(gT*40+45)%360},92%,66%,${wa*.72})`);
+    ln(cx,cy,wx,wy,`hsla(${(gT*40+45)%360},92%,66%,${wa*.09})`,.4);
+    ctx.fillStyle=`hsla(${(gT*40+45)%360},92%,66%,${wa*.52})`; ctx.font=`italic ${clamp(9,13,R/66)}px Georgia`; ctx.textAlign='center';
+    ctx.fillText(w,wx,wy-11);
+  });
+  // Central symbol
+  if(t>2.5){ const ca=fi(t,2.5,1.5);
+    glow(cx,cy,22+ca*14,`hsla(${(gT*40+30)%360},92%,66%,${ca*.48})`);
+    ctx.fillStyle=`hsla(${(gT*40+30)%360},92%,66%,${ca*.82})`; ctx.font=`${clamp(16,28,R/45)}px Georgia`; ctx.textAlign='center';
+    ctx.fillText('∞',cx,cy+9);
+  }
+}},
+
+{title:'Culture and Belief',sub:'collective constraint architectures · the enchanted cosmos',
+draw(t){
+  bg(10);
+  const R=Math.min(W,H);
+  const layers=[
+    {lbl:'cosmology',r:.43,c:`hsla(${(gT*40+30)%360},92%,66%,`,n:6},
+    {lbl:'ritual',r:.34,c:`hsla(${(gT*40+35)%360},92%,66%,`,n:8},
+    {lbl:'kinship',r:.25,c:`hsla(${(gT*40+110)%360},92%,66%,`,n:10},
+    {lbl:'story',r:.17,c:`hsla(${(gT*40+140)%360},92%,66%,`,n:12},
+    {lbl:'self',r:.09,c:`hsla(${(gT*40+220)%360},92%,66%,`,n:36},
+  ];
+  layers.forEach((l,i)=>{
+    const la=fi(t,i*.33,1.4);
+    const r=l.r*R, pulse=.98+.02*Math.sin(t*.7+i);
+    poly(cx,cy,r*pulse,l.n,t*.014*(i%2?1:-1),l.c+(la*.33)+')',.85+i*.08);
+    ctx.fillStyle=l.c+(la*.52)+')'; ctx.font=`${clamp(9,13,R/73)}px Georgia`; ctx.textAlign='center';
+    ctx.fillText(l.lbl,cx,cy-r*pulse-6);
+  });
+  if(t>2.4){ const pa=fi(t,2.4,1.5);
+    const outerR=layers[0].r*R*1.12;
+    for(let i=0;i<12;i++){
+      const a=(i/12)*TAU+t*.04;
+      circ(cx+Math.cos(a)*outerR,cy+Math.sin(a)*outerR,4,'',`hsla(${(gT*40+45)%360},92%,66%,${pa*.68})`);
+      ln(cx+Math.cos(a)*outerR,cy+Math.sin(a)*outerR,cx+Math.cos(a)*layers[0].r*R,cy+Math.sin(a)*layers[0].r*R,`hsla(${(gT*40+45)%360},92%,66%,${pa*.13})`,.4);
+    }
+  }
+  // Seed of Life center
+  const sr=R*.044, sa=fi(t,.8,2);
+  flowerCenters(cx,cy,sr).forEach(c=>circ(c.x,c.y,sr,`hsla(${(gT*40+30)%360},92%,66%,${sa*.22})`,'',0.5));
+}},
+
+{title:'Civilization',sub:'the full prior stack · cosmological · cultural · neural · personal',
+draw(t){
+  bg(11);
+  const R=Math.min(W,H);
+  const a=clamp(0,1,t/3);
+  // Precise grid
+  const g=38;
+  ctx.strokeStyle=`hsla(${(gT*40+40)%360},92%,66%,${a*.09})`; ctx.lineWidth=.4;
+  for(let x=0;x<W;x+=g){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=0;y<H;y+=g){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+  // Constraint bands
+  const layers=[
+    {lbl:'economic system',y:.72,c:`hsla(${(gT*40+35)%360},92%,66%,`,n:4},
+    {lbl:'political structure',y:.58,c:`hsla(${(gT*40+20)%360},92%,66%,`,n:5},
+    {lbl:'cultural narrative',y:.44,c:`hsla(${(gT*40+100)%360},92%,66%,`,n:6},
+    {lbl:'institutional belief',y:.30,c:`hsla(${(gT*40+140)%360},92%,66%,`,n:7},
+    {lbl:'identity story',y:.16,c:`hsla(${(gT*40+225)%360},92%,66%,`,n:8},
+  ];
+  layers.forEach((l,i)=>{
+    const la=fi(t,i*.28,1.4);
+    const bandY=l.y*H, bH2=H*.11;
+    ctx.fillStyle=l.c+(la*.11)+')'; ctx.fillRect(0,bandY,W,bH2);
+    poly(W*.055,bandY+bH2*.5,bH2*.3,l.n,t*.02*(i%2?1:-1),l.c+(la*.38)+')');
+    ctx.fillStyle=l.c+(la*.72)+')'; ctx.font=`${clamp(10,14,R/68)}px Georgia`; ctx.textAlign='left';
+    ctx.fillText(l.lbl,W*.1,bandY+bH2*.58);
+    ctx.strokeStyle=l.c+(la*.25)+')'; ctx.lineWidth=.8;
+    ctx.beginPath();ctx.moveTo(0,bandY);ctx.lineTo(W,bandY);ctx.stroke();
+  });
+  // no fixed location marker , the self is shaped by all layers simultaneously, not pinned to one
+}},
+
+{title:'The Intervention Point',sub:'REBUS · DMN suppression · the bifurcation window opens',
+draw(t){
+  bg(12);
+  const R=Math.min(W,H);
+  const rebus=clamp(0,1,t/3.5);
+  // Prior , downward arrows fading
+  const pA=Math.max(0,.68-rebus*.68);
+  for(let i=0;i<7;i++){
+    const x=W*(.15+i*.115);
+    ln(x,H*.12,x,H*.44,`hsla(${(gT*40+40)%360},92%,66%,${pA*.58})`,1.4);
+    ctx.fillStyle=`hsla(${(gT*40+40)%360},92%,66%,${pA*.58})`; ctx.beginPath();
+    ctx.moveTo(x,H*.44);ctx.lineTo(x-5,H*.44-12);ctx.lineTo(x+5,H*.44-12);ctx.closePath();ctx.fill();
+  }
+  // Rising signals
+  for(let i=0;i<10;i++){
+    const x=W*(.1+i*.09);
+    const yTop=lerp(H*.85,H*.28,rebus*(.4+((i*7.3)%1)*.6));
+    const hue=140+i*8;
+    const alpha=rebus*(.5+((i*3.1)%1)*.38);
+    ln(x,H*.85,x,yTop,`hsla(${hue},55%,65%,${alpha})`,2);
+    ctx.fillStyle=`hsla(${hue},55%,65%,${alpha})`; ctx.beginPath();
+    ctx.moveTo(x,yTop);ctx.lineTo(x-4,yTop+10);ctx.lineTo(x+4,yTop+10);ctx.closePath();ctx.fill();
+  }
+  // Bifurcation , downward pointing triangle (opening)
+  const bA=clamp(0,1,rebus*2);
+  poly(cx,cy+H*.05,R*.13,3,Math.PI/6,`hsla(${(gT*40+140)%360},92%,66%,${bA*.58})`,1.4);
+  glow(cx,cy+H*.05,R*.18,`hsla(${(gT*40+140)%360},92%,66%,${bA*.22})`);
+  // Label
+  const la=clamp(0,1,rebus*1.5);
+  ctx.fillStyle=`hsla(${(gT*40+140)%360},92%,66%,${la*.9})`; ctx.font=`${clamp(22,42,R/27)}px Georgia`; ctx.textAlign='center';
+  ctx.fillText('REBUS',cx,cy-H*.1);
+  ctx.fillStyle=`hsla(${(gT*40+140)%360},92%,66%,${la*.48})`; ctx.font=`italic ${clamp(10,14,R/72)}px Georgia`;
+  ctx.fillText('Relaxed Beliefs Under Psychedelics',cx,cy-H*.04);
+}},
+
+{title:'New Perception Cascades Outward',sub:'reorganization spreads · new constraints form · new world',
+draw(t){
+  bg(13);
+  const R=Math.min(W,H);
+  // Fibonacci spiral
+  ctx.strokeStyle=`hsla(${(gT*40+140)%360},92%,66%,${clamp(0,1,t/2)*.38})`; ctx.lineWidth=1.2; ctx.beginPath();
+  for(let i=0;i<400;i++){
+    const fr=i/400, gf=Math.min(fr,clamp(0,1,t/4)), a=gf*TAU*4, r=gf*R*.42;
+    i?ctx.lineTo(cx+Math.cos(a)*r,cy+Math.sin(a)*r):ctx.moveTo(cx+Math.cos(a)*r,cy+Math.sin(a)*r);
+  } ctx.stroke();
+  ctx.strokeStyle=`hsla(${(gT*40+30)%360},92%,66%,${clamp(0,1,t/2)*.28})`; ctx.lineWidth=.8; ctx.beginPath();
+  for(let i=0;i<400;i++){
+    const fr=i/400, gf=Math.min(fr,clamp(0,1,t/4)), a=gf*TAU*4+Math.PI, r=gf*R*.42;
+    i?ctx.lineTo(cx+Math.cos(a)*r,cy+Math.sin(a)*r):ctx.moveTo(cx+Math.cos(a)*r,cy+Math.sin(a)*r);
+  } ctx.stroke();
+  // Ripples
+  for(let i=0;i<8;i++){
+    const p=Math.max(0,t-i*.44);
+    circ(cx,cy,p*R*.064,`hsla(${140+i*12},50%,65%,${Math.max(0,.5-p*.055)})`,'',1);
+  }
+  // Cascade nodes
+  [{lbl:'ecological perception',dx:-.26,dy:-.18},{lbl:'new story',dx:.26,dy:-.15},
+   {lbl:'restored kinship',dx:-.22,dy:.22},{lbl:'new culture',dx:.22,dy:.2},
+   {lbl:'different civilization',dx:0,dy:-.32}].forEach((n,i)=>{
+    const na=fi(t,1.2+i*.48,1); if(na<=0) return;
+    const x=cx+n.dx*R, y=cy+n.dy*R;
+    circ(x,y,5,'',`hsla(${(gT*40+140)%360},92%,66%,${na*.8})`);
+    ln(cx,cy,x,y,`hsla(${(gT*40+140)%360},92%,66%,${na*.13})`,.5);
+    ctx.fillStyle=`hsla(${(gT*40+150)%360},92%,66%,${na*.68})`; ctx.font=`italic ${clamp(9,13,R/72)}px Georgia`; ctx.textAlign='center';
+    ctx.fillText(n.lbl,x,y-13);
+  });
+  glow(cx,cy,18+t*4,`hsla(${(gT*40+140)%360},92%,66%,${clamp(0,.48,t*.1)})`);
+}},
+
+{title:'What Becomes Possible',sub:'the capacity was never destroyed · only waiting',
+draw(t){
+  bg(14);
+  const R=Math.min(W,H);
+  const a=clamp(0,1,t/2.5);
+
+  // Geometry now spans the full canvas and sits dead center
+  const geoW=W;
+  const geoCx=cx;
+  const geoCy=cy;
+
+  // ── BACKGROUND STARS ──
+  for(let i=0;i<200;i++){
+    const sx=((i*137.5)%1)*geoW, sy=((i*97.3)%1)*H;
+    circ(sx,sy,.3+((i*3.7)%1)*.6,'',`hsla(${(gT*40+200)%360},92%,66%,${(.14+((i*7.1)%1)*.26)*a})`);
+  }
+
+  // ── METATRON'S CUBE , full construction sequence ──
+  // 1. Fruit of Life , 13 circles (Flower of Life outer ring)
+  const fruitR=R*.072;
+  const fruitCenters=[];
+  fruitCenters.push({x:geoCx,y:geoCy});
+  for(let i=0;i<6;i++){
+    const a2=(i/6)*TAU;
+    fruitCenters.push({x:geoCx+Math.cos(a2)*fruitR*2,y:geoCy+Math.sin(a2)*fruitR*2});
+  }
+  for(let i=0;i<6;i++){
+    const a2=(i/6)*TAU+Math.PI/6;
+    fruitCenters.push({x:geoCx+Math.cos(a2)*fruitR*4,y:geoCy+Math.sin(a2)*fruitR*4});
+  }
+
+  // Layer 1: Flower of Life circles , appear first
+  const flA=fi(t,0.2,2);
+  fruitCenters.forEach((c,i)=>{
+    const ca=fi(t,0.2+i*0.06,1.5);
+    circ(c.x,c.y,fruitR*2,`hsla(${(gT*40+140)%360},92%,66%,${ca*.22})`,'',0.5);
+  });
+
+  // Layer 2: Fruit of Life , 13 solid circles
+  const frA=fi(t,1.2,2);
+  fruitCenters.forEach((c,i)=>{
+    const ca=fi(t,1.2+i*0.05,1.2);
+    circ(c.x,c.y,fruitR,`hsla(${(gT*40+140)%360},92%,66%,${ca*.32})`,'',0.7);
+    glow(c.x,c.y,fruitR*1.5,`hsla(${(gT*40+140)%360},92%,66%,${ca*.12})`);
+  });
+
+  // Layer 3: Metatron\'s Cube , all 13 centers connected to each other
+  const metA=fi(t,2.2,2);
+  if(metA>0){
+    for(let i=0;i<fruitCenters.length;i++){
+      for(let j=i+1;j<fruitCenters.length;j++){
+        const dist=Math.hypot(fruitCenters[i].x-fruitCenters[j].x,fruitCenters[i].y-fruitCenters[j].y);
+        const weight=1-clamp(0,1,dist/(fruitR*8));
+        ln(fruitCenters[i].x,fruitCenters[i].y,
+           fruitCenters[j].x,fruitCenters[j].y,
+           `hsla(${(gT*40+140)%360},92%,66%,${metA*weight*.28})`,0.5);
+      }
+    }
+  }
+
+  // Layer 4: Star Tetrahedron (Star of David) , nested triangles
+  const starA=fi(t,3,1.5);
+  if(starA>0){
+    const sR=fruitR*4;
+    poly(geoCx,geoCy,sR,3,-Math.PI/2,`hsla(${(gT*40+30)%360},92%,66%,${starA*.45})`,1.2);
+    poly(geoCx,geoCy,sR,3,Math.PI/6,`hsla(${(gT*40+30)%360},92%,66%,${starA*.38})`,1);
+    // Inner hexagon where they intersect
+    poly(geoCx,geoCy,sR*.577,6,0,`hsla(${(gT*40+30)%360},92%,66%,${starA*.28})`,0.7);
+  }
+
+  // Layer 5: 64 Tetrahedron grid suggestion , outer ring of geometry
+  const outerA=fi(t,4,1.5);
+  if(outerA>0){
+    const oR=fruitR*6;
+    for(let i=0;i<6;i++){
+      const a2=(i/6)*TAU+Math.PI/6;
+      poly(geoCx+Math.cos(a2)*oR*.72,geoCy+Math.sin(a2)*oR*.72,oR*.38,3,
+           a2+t*.008,`hsla(${(gT*40+275)%360},92%,66%,${outerA*.25})`,0.6);
+    }
+    // Outer containing circle
+    circ(geoCx,geoCy,oR,`hsla(${(gT*40+275)%360},92%,66%,${outerA*.2})`,'',0.6);
+    // 12-pointed star
+    for(let i=0;i<12;i++){
+      const a2=(i/12)*TAU+t*.005;
+      ln(geoCx,geoCy,
+         geoCx+Math.cos(a2)*oR,geoCy+Math.sin(a2)*oR,
+         `hsla(${(gT*40+275)%360},92%,66%,${outerA*.1})`,0.4);
+    }
+  }
+
+  // Rotating sacred overlay
+  if(t>3.5){
+    const rA=fi(t,3.5,2);
+    ctx.save();
+    ctx.translate(geoCx,geoCy);
+    ctx.rotate(t*0.018);
+    poly(0,0,fruitR*5.5,6,0,`hsla(${(gT*40+30)%360},92%,66%,${rA*.12})`,0.6);
+    poly(0,0,fruitR*5.5,6,Math.PI/6,`hsla(${(gT*40+140)%360},92%,66%,${rA*.1})`,0.5);
+    ctx.restore();
+  }
+
+  // Central glow , the living center
+  glow(geoCx,geoCy,fruitR*1.8,`hsla(${(gT*40+130)%360},92%,66%,${a*.4})`);
+
+}}
+
+]; // end scenes
+
+// State
+let cur=0, sT=0, lastTS=0, started=false, ended=false;
+
+function updateUI(){
+  const s=scenes[cur];
+  document.getElementById('ctr').textContent='Scene '+(cur+1)+' of '+scenes.length;
+  document.getElementById('ttl').textContent=s.title;
+  document.getElementById('sub').textContent=s.sub;
+  document.getElementById('bar').style.width=((cur+1)/scenes.length*100)+'%';
+}
+
+function goTo(i){
+  if(i>=scenes.length){ ended=true; document.getElementById('end').classList.add('show'); document.getElementById('ui').style.opacity='0'; return; }
+  cur=clamp(0,scenes.length-1,i); sT=0;
+  updateUI();
+}
+
+// Animation loop
+requestAnimationFrame(function loop(ts){
+  const dt=Math.min((ts-lastTS)/1000,.05); lastTS=ts;
+  gT=ts/1000;
+  if(started){
+    sT+=dt; ctx.clearRect(0,0,W,H);
+    try{ scenes[cur].draw(sT); }
+    catch(e){
+      ctx.fillStyle='rgb('+bgs[cur]+')'; ctx.fillRect(0,0,W,H);
+      ctx.fillStyle='rgba(255,100,100,0.7)'; ctx.font='12px monospace'; ctx.textAlign='center';
+      ctx.fillText('Scene '+(cur+1)+' error: '+(e.message||String(e)), cx, cy);
+      console.error('Scene',cur,'error:',e);
+    }
+  }
+  requestAnimationFrame(loop);
+});
+
+// Input
+function advance(){
+  if(!started){
+    started=true;
+    const intro=document.getElementById('intro');
+    intro.style.opacity='0';
+    intro.style.pointerEvents='none';
+    setTimeout(()=>{ intro.style.display='none'; },1300);
+    goTo(0);
+    return;
+  }
+  if(!ended) goTo(cur+1);
+}
+
+document.addEventListener('click', advance);
+document.addEventListener('keydown', e=>{
+  if(['ArrowRight',' ','Enter'].includes(e.key)) advance();
+  if(e.key==='ArrowLeft'&&started&&!ended) goTo(cur-1);
+});
+document.getElementById('rst').addEventListener('click', e=>{
+  e.stopPropagation();
+  ended=false; document.getElementById('end').classList.remove('show'); document.getElementById('ui').style.opacity='1'; goTo(0);
+});
+
+updateUI();
+</script>
+</body>
+</html>
