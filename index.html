@@ -53,11 +53,7 @@
 </div>
 
 <script>
-// =============================================================================
-// FROM NOTHING TO NOW
-// Interactive web experience: 15 scenes, click to advance
-// Canvas handles all animation. Commentary lives in the speaker-notes document.
-// =============================================================================
+
 
 const cv = document.getElementById('c');
 const ctx = cv.getContext('2d');
@@ -104,11 +100,10 @@ function flowerCenters(px,py,r){ const c=[{x:px,y:py}]; for(let i=0;i<6;i++){con
 // stub -- annotation is now HTML, not canvas
 function drawAnnotation(){ }
 
-// Annotation data for each scene
-// Annotation content now lives in the companion speaker-notes document.
 
 
-// Build and show the HTML annotation panel for scene i
+
+
 const scenes=[
 
 {title:'Symmetry Breaking',sub:'13.8 billion years ago · the first difference',
